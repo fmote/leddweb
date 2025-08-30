@@ -3,8 +3,6 @@ from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure, Confi
 from pymongo.server_api import ServerApi
 import os
 from dotenv import load_dotenv
-import certifi
-import sys
 import base64
 from typing import Tuple, Optional
 import logging
@@ -44,28 +42,10 @@ class MongoDBConnection:
         return cls._connection_string
     
     @classmethod
-    def get_certificate_paths(cls) -> Tuple[str, str]:
-        """Get paths to certificate files"""
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        ca_path = os.path.join(base_dir, "CA", "ca.pem")
-        cert_path = os.path.join(base_dir, "CA", "client.pem")
-        return ca_path, cert_path
-    
-    @classmethod
-    def verify_certificates(cls, ca_path: str, cert_path: str) -> bool:
-        """Verify certificate files exist and are accessible"""
-        if not os.path.exists(ca_path) or not os.path.exists(cert_path):
-            logger.error(f"Certificate files not found. CA: {os.path.exists(ca_path)}, Cert: {os.path.exists(cert_path)}")
-            return False
-        return True
-    
-    @classmethod
-    def get_connection_options(cls, ca_path: str, cert_path: str) -> dict:
+    def get_connection_options(cls) -> dict:
         """Get MongoDB connection options"""
         return {
-            "tls": True,
-            "tlsCAFile": ca_path,
-            "tlsCertificateKeyFile": cert_path,
+            "tls": False,
             "retryWrites": False,
             "serverSelectionTimeoutMS": 3000,  # Reduced from 5000 to 3000ms
             "connectTimeoutMS": 5000,          # Reduced from 10000 to 5000ms
@@ -86,13 +66,8 @@ class MongoDBConnection:
             if not connection_string:
                 return None, None
             
-            # Get and verify certificates
-            ca_path, cert_path = cls.get_certificate_paths()
-            if not cls.verify_certificates(ca_path, cert_path):
-                return None, None
-            
             # Get connection options
-            client_options = cls.get_connection_options(ca_path, cert_path)
+            client_options = cls.get_connection_options()
             
             # Create MongoDB client
             client = MongoClient(connection_string, **client_options)
@@ -108,11 +83,11 @@ class MongoDBConnection:
             
         except ServerSelectionTimeoutError:
             # Avoid leaking server IP/port in logs
-            logger.error("mac refused to connect")
+            logger.error("Server selection timeout")
             return None, None
         except ConnectionFailure:
             # Avoid leaking server IP/port in logs
-            logger.error("mac refused to connect")
+            logger.error("Connection failure")
             return None, None
         except ConfigurationError:
             # Keep message generic to avoid leaking sensitive details
